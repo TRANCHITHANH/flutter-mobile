@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:table_calendar/table_calendar.dart';
 import '../providers/todo_provider.dart';
 import '../models/task_model.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -14,6 +15,25 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   DateTime _selectedDay = DateTime.now();
   bool _showCompleted = false;
+  @override
+  void initState() {
+    super.initState();
+    // Gọi yêu cầu cấp quyền ngay khi khởi tạo màn hình
+    _requestNotificationPermissions();
+  }
+
+  Future<void> _requestNotificationPermissions() async {
+    final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+
+    // Đối với Android
+    final androidImplementation = flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+
+    if (androidImplementation != null) {
+      // Hàm này sẽ kích hoạt hệ điều hành hiện hộp thoại Cho phép/Từ chối
+      await androidImplementation.requestNotificationsPermission();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
