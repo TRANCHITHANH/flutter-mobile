@@ -2,22 +2,32 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'providers/todo_provider.dart';
 import 'screens/home_screen.dart';
+import 'screens/login_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // Khởi tạo Provider (bên trong sẽ gọi SQLite init)
   final provider = TodoProvider();
-  await provider.init();
+  await provider.init(); // Khởi tạo SQLite
 
-  runApp(
-    ChangeNotifierProvider(
-      create: (_) => provider,
-      child: const MaterialApp(
-        debugShowCheckedModeBanner: false,
-        home: HomeScreen(),
-      )
-    )
-  );
+  runApp(ChangeNotifierProvider(
+    create: (_) => provider,
+    child: const MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: AuthCheck(), // Gọi widget kiểm tra
+    ),
+  ));
+}
+
+// Widget điều hướng: Chưa login -> LoginScreen, Rồi -> HomeScreen
+class AuthCheck extends StatelessWidget {
+  const AuthCheck({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    // Lắng nghe biến isLoggedIn trong Provider
+    final isLoggedIn = context.select((TodoProvider p) => p.isLoggedIn);
+    
+    return isLoggedIn ? const HomeScreen() : const LoginScreen();
+  }
 }
 
 class MyApp extends StatelessWidget {

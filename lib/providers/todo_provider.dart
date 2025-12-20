@@ -12,38 +12,79 @@ class TodoProvider extends ChangeNotifier {
   //SQLite nằm 0 ổ cứng (lấy chậm) >< biến _tasks lưu trữ tạm 0 RAM (lấy nhanh) nghĩa là:
   //Khi open app thì load data từ SQLite lên _tasks, khi thao tác CRUD thì chỉ cần thao tác trên _tasks rồi đồng bộ ngược lại SQLite
   List<Task> _tasks = [];
-
   //_tasks private --> tạo cổng phụ getter tên là tasks, chỉ cho phép nhìn và lấy dữ liệu qua cổng tasks
   List<Task> get tasks => _tasks;
 
+  bool _isLoggedIn = false;
+  bool get isLoggedIn => _isLoggedIn;
+  String _currentUsername = ""; // Lưu tên người đang đăng nhập
+  String get currentUsername => _currentUsername;
+
   // Tạo bảng
-  final String tableName = 'tasks';
+  final String taskTable = 'tasks';
+  final String userTable = 'users';
 
   // Khởi tạo Database SQLite
   Future<void> init() async {
     // Hàm getDatabasesPath() hỏi hệ điều hành xem thư mục app nằm ở đâu --> join() nối tên file db vào đường dẫn thư mục app (đường dẫn tuyệt đối)
     final dbPath = await getDatabasesPath();
-    final path = join(dbPath, 'calendar_database.db');
+    final path = join(dbPath, 'ThayKhuyen.db');
 
     //Test path ? nếu đã thì mở luôn 
     _database = await openDatabase(
       path,
-      version: 1,// ví dụ hôm nay lưu tên & ngày ... tháng sau: lưu thêm hình ảnh -->version: 2, tự động chạy hàm onUpgrade thêm cột  & ko mất dữ liệu cũ
-
-      onCreate: (db, version) { //chưa thì ra lệnh SQLite tạo bảng (giống tạo Sheet trong Excel)
-        return db.execute(
-          'CREATE TABLE $tableName(id TEXT PRIMARY KEY, title TEXT, isCompleted INTEGER, priority TEXT, date TEXT, category TEXT)',
+      version: 1,
+      onCreate: (db, version) async{
+        // Create tasks table including username column for ownership
+        await db.execute(
+          'CREATE TABLE $taskTable(id TEXT PRIMARY KEY, title TEXT, isCompleted INTEGER, priority TEXT, date TEXT, category TEXT, username TEXT)',
+        );
+        await db.execute(
+          'CREATE TABLE $userTable(username TEXT PRIMARY KEY, password TEXT)',
         );
       },
-
     );
-
-    await _loadTasks(); // Tải dữ liệu lên sau khi mở DB
+  }
+  // Đăng ký
+  Future<bool> register(String user, String pass) async {
+    try {
+      await _database!.insert(userTable, {'username': user, 'password': pass});
+      return true; // Thành công
+    } catch (e) {
+      return false;
+    }
   }
 
-  // Hàm đọc dữ liệu từ SQL lên List(hiển thị trên màn hình)
+  // Đăng nhập
+  Future<bool> login(String user, String pass) async {
+    List<Map> maps = await _database!.query(userTable,
+        where: 'username = ? AND password = ?',
+        whereArgs: [user, pass]);
+
+    if (maps.isNotEmpty) {
+      _isLoggedIn = true;
+      _currentUsername = user;
+      await _loadTasks(); // Đăng nhập xong thì tải task của người đó
+      notifyListeners();
+      return true;
+    }
+    return false;
+  }
+
+  // Đăng xuất
+  void logout() {
+    _isLoggedIn = false;
+    _currentUsername = "";
+    _tasks = []; // Xóa danh sách hiển thị
+    notifyListeners();
+  }
+
   Future<void> _loadTasks() async {
-    final List<Map<String, dynamic>> maps = await _database!.query(tableName);
+    // Chỉ lấy Task của người đang đăng nhập
+    final List<Map<String, dynamic>> maps = await _database!.query(taskTable, 
+      where: 'username = ?', 
+      whereArgs: [_currentUsername]
+    );
     _tasks = List.generate(maps.length, (i) => Task.fromMap(maps[i]));
     notifyListeners();
   }
@@ -58,12 +99,11 @@ class TodoProvider extends ChangeNotifier {
       category: cat
     );
 
-    await _database!.insert(
-      tableName,
-      newTask.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
-    
+    // Khi lưu, nhớ lưu kèm username
+    Map<String, dynamic> data = newTask.toMap();
+    data['username'] = _currentUsername;
+
+    await _database!.insert( taskTable, data, conflictAlgorithm: ConflictAlgorithm.replace,);
     _tasks.add(newTask);
     notifyListeners();
   }
@@ -73,44 +113,26 @@ class TodoProvider extends ChangeNotifier {
     final index = _tasks.indexWhere((t) => t.id == id);
     if (index != -1) {
       _tasks[index].isCompleted = !_tasks[index].isCompleted;
-      
-      await _database!.update(
-        tableName,
-        _tasks[index].toMap(),
-        where: 'id = ?',
-        whereArgs: [id],
-      );
-      
+      Map<String, dynamic> data = _tasks[index].toMap();
+      data['username'] = _currentUsername;
+      await _database!.update(taskTable, data, where: 'id = ?', whereArgs: [id]);
       notifyListeners();
     }
   }
 
   // Xóa Task
   Future<void> delete(String id) async {
-    await _database!.delete(
-      tableName,
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-    
+    await _database!.delete(taskTable, where: 'id = ?', whereArgs: [id]);
     _tasks.removeWhere((t) => t.id == id);
     notifyListeners();
   }
 
   // Cập nhật Task
   Future<void> updateTask(Task task) async {
-    await _database!.update(
-      tableName,
-      task.toMap(),
-      where: 'id = ?',
-      whereArgs: [task.id],
-    );
-    
-    // Cập nhật list local để giao diện tự đổi
+    Map<String, dynamic> data = task.toMap();
+    data['username'] = _currentUsername; // Đảm bảo không mất chủ sở hữu
+    await _database!.update(taskTable, data, where: 'id = ?', whereArgs: [task.id]);
     final index = _tasks.indexWhere((t) => t.id == task.id);
-    if (index != -1) {
-      _tasks[index] = task;
-      notifyListeners();
-    }
+    if (index != -1) { _tasks[index] = task; notifyListeners(); }
   }
 }

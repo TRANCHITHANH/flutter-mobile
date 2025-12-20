@@ -34,6 +34,27 @@ class _HomeScreenState extends State<HomeScreen> {
 
         body: SafeArea(
           child: Column(children: [
+            Padding(
+              padding: const EdgeInsets.all(15),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  // Hiển thị tên người dùng lấy từ Provider
+                  Consumer<TodoProvider>(builder: (_, prov, __) => Text(
+                    "Hi, ${prov.currentUsername}", 
+                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)
+                  )),
+                  
+                  IconButton(
+                    icon: const Icon(Icons.logout, color: Colors.redAccent),
+                    onPressed: () {
+                       // Gọi hàm logout, Provider sẽ báo main.dart chuyển về màn hình Login
+                       Provider.of<TodoProvider>(context, listen: false).logout();
+                    },
+                  )
+                ],
+              ),
+            ),
             TableCalendar(
               firstDay: DateTime.utc(2023), lastDay: DateTime.utc(2030),
               focusedDay: _selectedDay, currentDay: _selectedDay,
